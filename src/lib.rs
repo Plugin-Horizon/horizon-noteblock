@@ -54,7 +54,7 @@ fn level_name() -> String {
 }
 
 /// The first word of every usage (`radio`, `wr`, `nbmp`, ...), each once.
-/// Roots this mod leaves to another: `/sr` is SkinsRestorer's on the network (the proxy and every lobby
+/// Roots this mod leaves to another: `/sr` is SkinsRestorer's on a network (the proxy and every lobby
 /// carry it, and on Paper the proxy's `/sr` answers first); `/serverradio` stays for the server radio.
 const GIVEN_AWAY: [&str; 1] = ["sr"];
 

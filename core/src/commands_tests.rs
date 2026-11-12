@@ -173,7 +173,7 @@ fn skip_without_a_running_radio_says_so() {
     );
 }
 
-/// rec_lobby_winter: Bukkit shows NoteBlockMusicPlayer's commands to everyone; a player without the node gets
+/// On a lobby server: Bukkit shows NoteBlockMusicPlayer's commands to everyone; a player without the node gets
 /// `command_permission` (messages_en.yml), `/radio` stays open (radio.toggle/radio.volume default true).
 #[test]
 fn a_player_without_the_node_is_told_so() {
