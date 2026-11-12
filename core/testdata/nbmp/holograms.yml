@@ -1,5 +1,0 @@
-hologram:
-  example_hologram:
-    lines:
-    - 'Playing: %song_title%'
-    - '%song_number%/%songs_count%'
