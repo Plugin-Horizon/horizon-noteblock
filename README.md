@@ -1,12 +1,16 @@
 # horizon-noteblock
 
-> **Unofficial Rust port of NoteBlockMusicPlayer and NoteBlockAPI for the Horizon server (https://github.com/horizon-rust/horizon). Not affiliated with or endorsed by the NoteBlockMusicPlayer or NoteBlockAPI authors.**
+> **Unofficial Rust port of NoteBlockMusicPlayer and NoteBlockAPI for the Horizon server (https://github.com/arismoko/horizon). Not affiliated with or endorsed by the NoteBlockMusicPlayer or NoteBlockAPI authors.**
 
-Note block music for [Horizon](https://github.com/horizon-rust/horizon) servers, as a native mod (a horizon-mixins
-bundle): Note Block Studio songs (`.nbs`) are played as vanilla note block sounds to the players of a world radio, a
-server radio or a position radio, with playlists, the song titles of `songs.yml` and the action bar, and the commands
-of NoteBlockMusicPlayer. It reads the original plugin folder (`plugins/NoteBlockMusicPlayer/`) as it is, and
-NoteBlockAPI's song player is part of it (no separate library).
+> **Built for and working only with [arismoko/horizon](https://github.com/arismoko/horizon)** (the Horizon fork that carries the mod API). [horizon-rust/horizon](https://github.com/horizon-rust/horizon) is experimental for mods and not supported: the earlier version for its native hooks / horizon-mixins is frozen on the `horizon-plain` branch (work stopped on 2026-11-12).
+
+## Which Horizon
+
+This is a native trait mod: `horizon-mod.toml`, a `Cargo.toml` that depends on `horizon-mod-api`, `src/lib.rs` with the hooks, and the plugin logic in the `core/` crate (plain Rust, no engine needed for its tests).
+
+- Pin: `[native] horizon = "54090ee36c4e2c7b43b66db864220c577b94b7e0"` in `horizon-mod.toml` (game `26.3`). That is a development build of arismoko/horizon `main` plus mod API additions that are not all merged upstream yet, so a stock `main` may lack some host methods this mod calls until they land.
+- It compiled and loaded on that build and was smoke-tested there; it has not seen a long run with real players. Treat it as experimental.
+- Feature descriptions below were written for the earlier horizon-rust version; where they name engine calls (`native_*`) or old file paths, read them as descriptions only. The Known gaps list is current.
 
 ## What it does
 
@@ -30,28 +34,26 @@ NoteBlockAPI's song player is part of it (no separate library).
   NBMP writes it.
 - **Holograms**: `holograms.yml` is read; no hologram provider exists on the server, so nothing is shown.
 
-What is ported and what is not: [STATUS.md](STATUS.md). What Horizon would need for the rest: [GAPS.md](GAPS.md).
+What is ported and what is not: the Known gaps section. What Horizon would need for the rest: the Known gaps section.
 
 On the server this replaces, every radio is disabled in the files, so this mod starts nothing; it only reads them.
 
-## Layout
+## Build
 
-- `core/`: the logic (`nbs`, `instrument`, `pitch`, `config`, `library`, `radio`, `engine`, `commands`, `messages`),
-  unit tests beside the code and `engine_tests.rs` / `commands_tests.rs`; `core/testdata/nbmp/` is a synthetic
-  folder with the same flags as the server's files and invented values; `core/src/yaml.rs` is horizon-yaml (MIT),
-  vendored unchanged.
-- `core/examples/check_original.rs`: `cargo run --example check_original -- <files>` prints, per file, the format,
-  length, tempo, layer and note counts of an `.nbs` song, and for a `.yml` file the key paths read and not read (key
-  paths only; no values, no titles, no song names beyond key names).
-- `helpers/`: the glue (`glue.rs` becomes `crate::game::noteblock_glue`), the three hook helpers and the API module.
-- `horizon-mixin.toml`: the bundle (tick, register commands, perform command).
+Build it as a native trait mod with arismoko's launcher (see the "native mods" how-to in the arismoko/horizon docs):
 
-## Testing
-
+```sh
+horizon-launcher native-build <path to this folder> --server-output <dir> --version <tag> --trust-native-code
 ```
-cd core && CARGO_TARGET_DIR=<repo>/target cargo test
-cd core && CARGO_TARGET_DIR=<repo>/target cargo run --example check_original -- <original files>
-```
+
+`--trust-native-code` is your consent to compile and run this code inside the server. The logic crate tests run without the engine: `(cd core && cargo test)`.
+
+## Known gaps
+
+What does not work yet on arismoko/horizon (each is marked `TODO(arismoko-api: ...)` in `src/lib.rs`):
+
+- The permission nodes of the original `plugin.yml` are not asked: a permissions mod cannot grant `radio.toggle` and friends, operator level applies.
+- Sub-command tab completion and per-sub-command operator levels are lost; the obfuscated colour code is dropped.
 
 ## Licence and sources
 
