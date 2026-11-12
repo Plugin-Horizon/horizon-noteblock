@@ -1,0 +1,64 @@
+# horizon-noteblock: NoteBlockAPI 1.7.0 and NoteBlockMusicPlayer 1.10.0 (note block music on radios, playlists,
+# the commands) as a Horizon native mod (horizon-mixins bundle). Written blind: no engine build has run it yet;
+# the hook names are the catalog's (native-hooks.json) and the engine helpers are the ones listed in STATUS.md.
+
+[mod]
+id = "noteblock"
+version = "0.1.0"
+priority = 100
+
+[compatibility]
+horizon_revision = "3b225249fc594ffb4c4d96448ba714d45f99ada1"
+
+# The logic, free of game types (unit tested on its own). A dependency of horizon-client-lib.
+[[crate]]
+id = "core"
+path = "core"
+dependent = "horizon-client-lib"
+
+# `horizon_client::noteblock`: the core's API for the game's helpers.
+[[module]]
+id = "api-noteblock"
+file = "crates/horizon-client/src/client_lib.rs"
+name = "noteblock"
+source = "helpers/api_noteblock.rs"
+visibility = "pub"
+
+# `crate::game::noteblock_glue`: the engine's state, the players in, the sounds and lines out.
+[[module]]
+id = "glue"
+file = "crates/horizon-client/src/game.rs"
+name = "noteblock_glue"
+source = "helpers/glue.rs"
+
+# Every tick: the radios play.
+[[injection]]
+id = "tick"
+hook = "tick"
+hook_version = 1
+kind = "HEAD"
+helper = "helpers/tick.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]
+
+# The command usages (every root and alias).
+[[injection]]
+id = "register-commands"
+hook = "register_commands"
+hook_version = 1
+kind = "HEAD"
+helper = "helpers/register_commands.rs"
+bindings = [{ name = "commands", ty = "&mut Vec<horizon_client::mod_api::NativeCommand>", value = "&mut *commands" }]
+
+# A player's command of this mod.
+[[injection]]
+id = "perform-command"
+hook = "perform_command"
+hook_version = 1
+kind = "HEAD"
+helper = "helpers/perform_command.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "&horizon_client::mod_api::NativeServerPlayer", value = "player" },
+  { name = "command", ty = "&str", value = "command" },
+  { name = "ran", ty = "&mut bool", value = "&mut *ran" },
+]

@@ -1,0 +1,13 @@
+[package]
+name = "horizon-noteblock-core"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "NoteBlockMusicPlayer and NoteBlockAPI logic (NBS songs, radios, playlists, commands) for Horizon servers"
+publish = false
+
+[lib]
+name = "horizon_noteblock"
+
+# No dependencies: std only (Horizon's Cargo.lock has no YAML crate; the YAML reader is vendored as src/yaml.rs).
+[dependencies]

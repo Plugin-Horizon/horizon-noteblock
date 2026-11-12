@@ -1,0 +1,19 @@
+Copyright (C) 2026 Plugin-Horizon contributors
+
+This mod is derived from NoteBlockAPI and NoteBlockMusicPlayer, and is distributed under the GNU General Public
+License, version 3 or (at your option) any later version (see LICENSE).
+
+Original works:
+
+- NoteBlockAPI 1.7.0 (https://github.com/koca2000/NoteBlockAPI), licensed under the GNU Lesser General Public
+  License, version 3 (LGPL-3.0). Its authors as listed in its plugin.yml: xxmicloxx, michidk, koca2000, Luck.
+  Its source was read while writing this port. No code was copied; the song player's tick clock, the NBS reader's
+  layout, the instrument table, the pitch table and the volume formula were written again from the behaviour of that
+  source. The combination with the GPL-3.0 is allowed by the LGPL-3.0 (section 3).
+- NoteBlockMusicPlayer 1.10.0, by koca2000 (as listed in its plugin.yml; package cz.studiodamage). Its source was not
+  available for reading: its behaviour is taken from the server's own files, from the message keys and command
+  strings of its jar, and from NoteBlockAPI. Its own licence has not been verified by this port.
+- horizon-yaml (MIT), vendored unchanged as core/src/yaml.rs, Copyright (c) 2026 Plugin-Horizon contributors.
+
+This project is a port made for the Horizon server. It is not affiliated with or endorsed by the NoteBlockAPI or
+NoteBlockMusicPlayer authors.

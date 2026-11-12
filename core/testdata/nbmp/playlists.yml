@@ -1,0 +1,5 @@
+playlist:
+  fixture_playlist:
+  - tone_alpha
+  - tone_beta
+  - tone_gamma
