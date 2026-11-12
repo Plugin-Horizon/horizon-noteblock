@@ -2,7 +2,7 @@ id = "noteblock"
 name = "NoteBlockMusicPlayer"
 version = "0.1.0"
 description = "Note Block Studio songs on the server's radios (NoteBlockMusicPlayer 1.10.0 with NoteBlockAPI 1.7.0): world, server and position radios, playlists, commands."
-authors = ["CoreSMP"]
+authors = ["Plugin-Horizon contributors"]
 api = "0.2"
 capabilities = ["registries"]
 
