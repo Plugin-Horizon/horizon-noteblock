@@ -185,8 +185,8 @@ impl Hooks for Mod {
             line.push(' ');
             line.push_str(args);
         }
-        let player = match event.source {
-            CommandSource::Player { player, .. } => player,
+        let player = match &event.source {
+            CommandSource::Player { player, .. } => *player,
             _ => {
                 // Console use was never ported (the Java plugin's console path is not in the perform hook).
                 let _ = host.commands().feedback(Text::literal(
@@ -205,11 +205,11 @@ impl Hooks for Mod {
             };
             // The original asks each node (`radio.toggle`, `nbmp.admin`, ...) with `hasPermission`: a
             // permissions provider's answer decides; unset, the plugin.yml default does (everyone pass
-            // for default 0, the others need permission level 2, the game master).
+            // for default 0; `default: op` (1) is any operator, as Bukkit's isOp() is, so level >= 1).
             let answer = loaded.engine.command_checked(Some(uuid), &line, |node, default_level| {
                 player
                     .permission_value(&*host, node)
-                    .unwrap_or(default_level == 0 || op_level >= 2)
+                    .unwrap_or(default_level == 0 || op_level >= default_level)
             });
             for log_line in loaded.engine.take_log() {
                 log(&log_line);
