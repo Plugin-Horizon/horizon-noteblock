@@ -7,12 +7,14 @@
 //! - `server_tick` (start of a tick): hands the players in, sends the note sounds and action bar lines it answers with.
 //! - `register_commands` / `run_mod_command`: one usage per root (`radio`, `wr`, `sr`, `pr`, `nbmp`, ...) taking the
 //!   rest of the line; the line goes through the core's command table with the permission check of the original.
-use horizon_noteblock::commands;
-use horizon_noteblock::engine::{Engine, Out, PlayerView, WorldView};
+
+pub mod horizon_noteblock;
+use crate::horizon_noteblock::commands;
+use crate::horizon_noteblock::engine::{Engine, Out, PlayerView, WorldView};
 use mod_api::{
-    Command, CommandArgumentValue, CommandSource, Flow, Hooks, RegisterCommandsEvent,
-    RunModCommandEvent, ServerAboutToStartEvent, ServerHost, ServerTickEvent, ServerTickPhase,
-    SoundSource, Text,
+    Command, CommandArgumentValue, CommandSource, Flow, Hooks, NodeDefault, PermissionGatherNodesEvent,
+    PermissionLevel, PermissionNode, PermissionValueType, RegisterCommandsEvent, RunModCommandEvent,
+    ServerAboutToStartEvent, ServerHost, ServerTickEvent, ServerTickPhase, SoundSource, Text,
 };
 use std::path::Path;
 use std::sync::Mutex;
@@ -150,8 +152,29 @@ fn styled(line: &str) -> Text {
     root
 }
 
+/// Every permission node a usage names, once, with the operator level its usage falls back to (the first usage
+/// that names it decides; the usages agree per node).
+fn permission_nodes() -> std::collections::BTreeMap<String, u8> {
+    let mut nodes = std::collections::BTreeMap::new();
+    for usage in commands::usages() {
+        if let Some(node) = usage.permission {
+            nodes.entry(node).or_insert(usage.level);
+        }
+    }
+    nodes
+}
+
 #[mod_api::horizon_mod]
 impl Hooks for Mod {
+    fn permission_gather_nodes(&self, event: &mut PermissionGatherNodesEvent<'_>) {
+        for (node, level) in permission_nodes() {
+            let _ = event.nodes.add(
+                PermissionNode::new(node, PermissionValueType::Boolean),
+                NodeDefault::Level(PermissionLevel::from_level(i32::from(level))),
+            );
+        }
+    }
+
     fn server_about_to_start(&self, _: &mut dyn ServerHost, _: &mut ServerAboutToStartEvent) {
         let level = level_name();
         let mut engine = Engine::load(Path::new(FOLDER), vec![level.clone()], seed());
@@ -196,21 +219,21 @@ impl Hooks for Mod {
             }
         };
         let uuid = player.uuid();
-        // Operator level of the player, for the permission nodes below.
-        let op_level = player.permission_level(&*host).unwrap_or(0);
+        // The original asks the node of the matched usage (`radio.toggle`, `nbmp.admin`, ...) with `hasPermission`.
+        // The node's default (declared in `permission_gather_nodes`) decides unless the handler answers; any error
+        // is a denial. The query runs before the engine lock, since it needs the host.
+        let granted = match commands::needs(&line) {
+            Some((node, _)) => player
+                .permission_bool(&mut *host, &PermissionNode::new(node, PermissionValueType::Boolean))
+                .unwrap_or(false),
+            None => true,
+        };
         let answer = {
             let mut slot = self.loaded.lock().unwrap_or_else(|e| e.into_inner());
             let Some(loaded) = slot.as_mut() else {
                 return Flow::Continue;
             };
-            // The original asks each node (`radio.toggle`, `nbmp.admin`, ...) with `hasPermission`: a
-            // permissions provider's answer decides; unset, the plugin.yml default does (everyone pass
-            // for default 0; `default: op` (1) is any operator, as Bukkit's isOp() is, so level >= 1).
-            let answer = loaded.engine.command_checked(Some(uuid), &line, |node, default_level| {
-                player
-                    .permission_value(&*host, node)
-                    .unwrap_or(default_level == 0 || op_level >= default_level)
-            });
+            let answer = loaded.engine.command_checked(Some(uuid), &line, |_, _| granted);
             for log_line in loaded.engine.take_log() {
                 log(&log_line);
             }

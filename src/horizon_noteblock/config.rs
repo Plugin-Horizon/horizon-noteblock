@@ -4,8 +4,8 @@
 //! leaves of a file, so a file's keys that the port does not read are listed (key paths only, never values).
 //! Nothing here writes a file except what the engine saves itself (`playlists.yml`, as NBMP does).
 
-use crate::messages::Messages;
-use crate::yaml::{self, Document, Node};
+use crate::horizon_noteblock::messages::Messages;
+use crate::horizon_noteblock::yaml::{self, Document, Node};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 

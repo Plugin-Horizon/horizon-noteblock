@@ -4,14 +4,14 @@
 //! The engine knows players only by uuid, dimension and position (the glue passes them in each tick). World
 //! names follow Bukkit's: the level's name in the overworld, `<level>_nether` and `<level>_the_end` elsewhere.
 
-use crate::commands::Answer;
-use crate::config::{self, ConfigFile, Files, RadioDef};
-use crate::instrument;
-use crate::library::Library;
-use crate::messages::{self, Messages};
-use crate::pitch;
-use crate::radio::{Event, Kind, Radio, RadioSpec, Rng};
-use crate::yaml::{self, Document, Node};
+use crate::horizon_noteblock::commands::Answer;
+use crate::horizon_noteblock::config::{self, ConfigFile, Files, RadioDef};
+use crate::horizon_noteblock::instrument;
+use crate::horizon_noteblock::library::Library;
+use crate::horizon_noteblock::messages::{self, Messages};
+use crate::horizon_noteblock::pitch;
+use crate::horizon_noteblock::radio::{Event, Kind, Radio, RadioSpec, Rng};
+use crate::horizon_noteblock::yaml::{self, Document, Node};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -670,7 +670,7 @@ impl Engine {
 
     /// Runs a command line (without its slash) for a player (`None` for the console). See `commands`.
     pub fn command(&mut self, uuid: Option<u128>, line: &str) -> Answer {
-        crate::commands::run(self, uuid, line)
+        crate::horizon_noteblock::commands::run(self, uuid, line)
     }
 
     /// A player's command, with the permission check NoteBlockMusicPlayer's executors make.
@@ -680,7 +680,7 @@ impl Engine {
         line: &str,
         allowed: impl Fn(&str, u8) -> bool,
     ) -> Answer {
-        crate::commands::run_checked(self, uuid, line, allowed)
+        crate::horizon_noteblock::commands::run_checked(self, uuid, line, allowed)
     }
 
     /// Names of the radios and their state, for the console and the tests.

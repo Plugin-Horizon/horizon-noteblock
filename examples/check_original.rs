@@ -5,8 +5,8 @@
 //! `songs.yml`, `holograms.yml`, `messages_<language>.yml`) is read with the port's own reader and prints the key
 //! paths it reads and the key paths it does not read. Values, titles and names of songs are never printed.
 
-use horizon_noteblock::config::report_for;
-use horizon_noteblock::nbs;
+use mod_noteblock::horizon_noteblock::config::report_for;
+use mod_noteblock::horizon_noteblock::nbs;
 use std::path::Path;
 
 fn main() {

@@ -2,12 +2,12 @@
 //! the switches and checks of the commands, and playlists saved to a copy of the folder.
 
 use super::*;
-use crate::nbs::testutil::{FileSpec, note};
-use crate::radio::{Kind, RadioSpec};
+use crate::horizon_noteblock::nbs::testutil::{FileSpec, note};
+use crate::horizon_noteblock::radio::{Kind, RadioSpec};
 
 fn fixture_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("testdata")
+        .join("data").join("noteblock").join("testdata")
         .join("nbmp")
 }
 
@@ -26,10 +26,10 @@ fn world_view(players: &[(u128, &str, [f64; 3])]) -> WorldView {
 }
 
 /// A song of `length` ticks, one note per tick (layer 0, instrument 0, key 45 = base pitch), 10 ticks per second.
-fn tone(length: i32) -> crate::nbs::Song {
+fn tone(length: i32) -> crate::horizon_noteblock::nbs::Song {
     let notes: Vec<_> = (0..=length).map(|t| note(t, 0, 0, 45)).collect();
     let spec = FileSpec::new(0, length as u16, 1, 1000, notes);
-    crate::nbs::parse(&spec.bytes()).expect("synthetic song parses")
+    crate::horizon_noteblock::nbs::parse(&spec.bytes()).expect("synthetic song parses")
 }
 
 fn radio(kind: Kind, name: &str, songs: &[&str], volume: u8) -> RadioSpec {

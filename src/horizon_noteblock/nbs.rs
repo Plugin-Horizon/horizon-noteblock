@@ -2,7 +2,7 @@
 //! read the way NoteBlockAPI 1.7.0 reads them (`utils/NBSDecoder`). Trailing bytes after the custom instrument
 //! list are ignored, so files with zero padding read the same.
 
-use crate::instrument::FIRST_CUSTOM;
+use crate::horizon_noteblock::instrument::FIRST_CUSTOM;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 

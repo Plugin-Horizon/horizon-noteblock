@@ -1,8 +1,8 @@
 //! The song files of `songs/` (read on demand) with their titles and authors: `songs.yml` overrides first,
 //! then the song's own title, then the file name.
 
-use crate::config::SongMeta;
-use crate::nbs::{self, Song};
+use crate::horizon_noteblock::config::SongMeta;
+use crate::horizon_noteblock::nbs::{self, Song};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -121,7 +121,7 @@ impl Library {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nbs::testutil::{FileSpec, note};
+    use crate::horizon_noteblock::nbs::testutil::{FileSpec, note};
 
     fn song_with_title(title: &str) -> Song {
         let mut spec = FileSpec::new(0, 4, 1, 1000, vec![note(0, 0, 0, 45)]);

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 fn engine() -> Engine {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("testdata")
+        .join("data").join("noteblock").join("testdata")
         .join("nbmp");
     Engine::load(&dir, vec!["fixture_world".to_string()], 1)
 }
@@ -187,9 +187,9 @@ fn a_player_without_the_node_is_told_so() {
     assert!(a.lines[0].contains("You are not allowed"), "{:?}", a.lines);
     let a = e.command_checked(Some(7), "radio", deny);
     assert!(a.lines.iter().any(|l| l.contains("/radio toggle")), "{:?}", a.lines);
-    assert_eq!(crate::commands::needs("wr enable world"), Some(("worldradio.enable".into(), 1)));
-    assert_eq!(crate::commands::needs("nbmp playlist list"), Some(("nbmp.playlist.list".into(), 1)));
-    assert_eq!(crate::commands::needs("radio toggle"), Some(("radio.toggle".into(), 0)));
+    assert_eq!(crate::horizon_noteblock::commands::needs("wr enable world"), Some(("worldradio.enable".into(), 1)));
+    assert_eq!(crate::horizon_noteblock::commands::needs("nbmp playlist list"), Some(("nbmp.playlist.list".into(), 1)));
+    assert_eq!(crate::horizon_noteblock::commands::needs("radio toggle"), Some(("radio.toggle".into(), 0)));
     let a = e.command_checked(Some(7), "nbmp", |_, _| true);
     assert!(a.lines[0].contains("/noteblockmusicplayer help"), "{:?}", a.lines);
 }

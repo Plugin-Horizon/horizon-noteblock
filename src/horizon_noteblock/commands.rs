@@ -7,8 +7,8 @@
 //! Permission nodes come from `plugin.yml`; the gate of a sub-command with no node of its own (playlist `songs`,
 //! `remove`, `hologram`) is inferred and listed in STATUS.md.
 
-use crate::engine::Engine;
-use crate::radio::Kind;
+use crate::horizon_noteblock::engine::Engine;
+use crate::horizon_noteblock::radio::Kind;
 
 /// What a command answered: whether it ran (so the server does not run it as vanilla), and its lines (`§` codes).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

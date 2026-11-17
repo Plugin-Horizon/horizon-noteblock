@@ -4,7 +4,7 @@
 //! played, then the song ends. Between songs the radio waits `delay` ticks. The order is the playlist's (repeat
 //! starts it again) or random (every song once, then again with repeat, else the radio goes idle).
 
-use crate::library::Library;
+use crate::horizon_noteblock::library::Library;
 
 /// Which radio: a world radio (every player in the world), a server radio (every player) or a position radio
 /// (players within a radius).
@@ -322,8 +322,8 @@ impl Radio {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nbs;
-    use crate::nbs::testutil::{FileSpec, note};
+    use crate::horizon_noteblock::nbs;
+    use crate::horizon_noteblock::nbs::testutil::{FileSpec, note};
 
     /// A song of `length` ticks at 10 ticks per second (one song tick every 2 server ticks), with one note per tick.
     fn library_with(songs: &[(&str, i32)]) -> Library {
