@@ -298,7 +298,9 @@ impl Engine {
             .copied()
             .collect();
         for uuid in gone {
-            self.volumes.remove(&uuid);
+            if !self.cfg.save_player_volumes {
+                self.volumes.remove(&uuid);
+            }
             self.muted.remove(&uuid);
         }
         self.present = now;
@@ -689,6 +691,20 @@ impl Engine {
             .iter()
             .map(|r| (format!("{}:{}", r.kind.word(), r.name), r.enabled))
             .collect()
+    }
+
+    /// Names of the radios of one kind (for tab completion).
+    pub fn radio_names(&self, kind: Kind) -> Vec<String> {
+        self.radios
+            .iter()
+            .filter(|r| r.kind == kind)
+            .map(|r| r.name.clone())
+            .collect()
+    }
+
+    /// Names of the `songs/*.nbs` files without extension (for tab completion).
+    pub fn song_files(&self) -> Vec<String> {
+        self.library.file_names()
     }
 
     /// The raw playlist list (names and songs), for tests.

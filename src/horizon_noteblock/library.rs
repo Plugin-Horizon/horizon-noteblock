@@ -94,6 +94,21 @@ impl Library {
         }
     }
 
+    /// The names (without `.nbs`) of the song files in the songs folder, sorted.
+    pub fn file_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(&self.dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|entry| {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                name.strip_suffix(".nbs").map(str::to_owned)
+            })
+            .collect();
+        names.sort();
+        names
+    }
+
     /// Stores a parsed song under a name (titles and authors from `songs.yml` apply).
     pub fn insert(&mut self, name: &str, song: Song) {
         let meta = self.meta.get(name).cloned().unwrap_or_default();

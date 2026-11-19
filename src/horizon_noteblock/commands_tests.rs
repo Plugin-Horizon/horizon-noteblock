@@ -194,3 +194,21 @@ fn a_player_without_the_node_is_told_so() {
     assert!(a.lines[0].contains("/noteblockmusicplayer help"), "{:?}", a.lines);
 }
 
+
+#[test]
+fn tab_completion_offers_sub_commands_radios_playlists_and_songs() {
+    let e = engine();
+    assert_eq!(complete(&e, "radio "), vec!["help", "toggle", "volume"]);
+    assert_eq!(complete(&e, "radio t"), vec!["toggle"]);
+    assert_eq!(complete(&e, "wr en"), vec!["enable"]);
+    assert_eq!(complete(&e, "wr enable "), vec!["world_radio"]);
+    assert_eq!(complete(&e, "sr skip s"), vec!["server_radio"]);
+    assert_eq!(complete(&e, "nbmp pl"), vec!["playlist"]);
+    assert_eq!(complete(&e, "nbmp playlist r"), vec!["reload", "remove"]);
+    assert_eq!(complete(&e, "nbmp playlist songs "), vec!["fixture_playlist"]);
+    assert_eq!(
+        complete(&e, "nbmp playlist remove fixture_playlist tone_a"),
+        vec!["tone_alpha"]
+    );
+    assert!(complete(&e, "nbmp playlist create ").is_empty());
+}

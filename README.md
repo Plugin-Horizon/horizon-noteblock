@@ -27,7 +27,7 @@ This is a native trait mod: `horizon-mod.toml`, a `Cargo.toml` that depends on `
 - **Titles**: `songs.yml` title and author first (block scalars such as `|2-` included), then the song's own title,
   then the file name. Action bar `You are now listening %song_title%` when a song starts (`actionbar: true`).
 - **Player state**: `/radio toggle` (mute all radios for you), `/radio volume <0-100>`; the default volume from
-  `config.yml`. Not saved across log-outs (`savePlayerVolumes: false`).
+  `config.yml`. Kept across log-outs while the server runs when `savePlayerVolumes: true` (not written to disk).
 - **Commands**: `/radio`, `/worldradio` (`wr`), `/serverradio` (`sr`), `/positionradio` (`pr`), `/noteblockmusicplayer`
   (`nbmp`): enable, disable, skip, reload, playlist list/songs/create/add/remove/reload, hologram (answers "not
   enabled"). Permission nodes from `plugin.yml`. `playlists.yml` is written back in place on create/add/remove, as
@@ -52,8 +52,11 @@ horizon-launcher native-build <path to this folder> --server-output <dir> --vers
 
 What does not work yet on arismoko/horizon (each is marked `TODO(arismoko-api: ...)` in `src/lib.rs`):
 
-- The permission nodes of the original `plugin.yml` are not asked: a permissions mod cannot grant `radio.toggle` and friends, operator level applies.
-- Sub-command tab completion and per-sub-command operator levels are lost; the obfuscated colour code is dropped.
+- Per-sub-command operator levels are not part of the command tree (the nodes are checked when the command runs);
+  tab completion lists every sub-command whatever the permission.
+- `/sr` is left to the SkinsRestorer port; use `/serverradio`.
+- Not ported: holograms, custom instruments (id 20 and up), `use10OctaveRange` sound-name suffixes, fade in/out,
+  stereo/panning, song player events and the library API for other mods. Timing follows server ticks, not real time.
 
 ## Licence and sources
 

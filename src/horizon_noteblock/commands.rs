@@ -219,6 +219,61 @@ pub fn run(engine: &mut Engine, uuid: Option<u128>, line: &str) -> Answer {
     }
 }
 
+/// Tab completion for a command line (without its slash; the last word is the one being typed, possibly empty):
+/// the sub-commands, the radio names, the playlist names and the song files, filtered by the typed prefix.
+pub fn complete(engine: &Engine, line: &str) -> Vec<String> {
+    let words: Vec<&str> = line.split(' ').collect();
+    let Some(current) = words.last().map(|w| w.to_ascii_lowercase()) else {
+        return Vec::new();
+    };
+    let index = words.len() - 1;
+    let root = words[0].to_ascii_lowercase();
+    let sub = |n: usize| words.get(n).map(|w| w.to_ascii_lowercase()).unwrap_or_default();
+    let candidates: Vec<String> = match (root.as_str(), index) {
+        ("radio", 1) => ["help", "toggle", "volume"].map(String::from).to_vec(),
+        ("worldradio" | "wr" | "serverradio" | "sr" | "positionradio" | "pr", 1) => {
+            ["help", "enable", "disable", "skip", "reload"].map(String::from).to_vec()
+        }
+        ("worldradio" | "wr", 2) if ["enable", "disable", "skip"].contains(&sub(1).as_str()) => {
+            engine.radio_names(Kind::World)
+        }
+        ("serverradio" | "sr", 2) if ["enable", "disable", "skip"].contains(&sub(1).as_str()) => {
+            engine.radio_names(Kind::Server)
+        }
+        ("positionradio" | "pr", 2) if ["enable", "disable", "skip"].contains(&sub(1).as_str()) => {
+            engine.radio_names(Kind::Position)
+        }
+        ("noteblockmusicplayer" | "nbmp", 1) => {
+            ["help", "reload", "playlist", "hologram"].map(String::from).to_vec()
+        }
+        ("noteblockmusicplayer" | "nbmp", 2) if sub(1) == "playlist" => {
+            ["help", "list", "songs", "create", "add", "remove", "reload"].map(String::from).to_vec()
+        }
+        ("noteblockmusicplayer" | "nbmp", 2) if sub(1) == "hologram" => {
+            ["reload", "list"].map(String::from).to_vec()
+        }
+        ("noteblockmusicplayer" | "nbmp", 3)
+            if sub(1) == "playlist" && ["songs", "add", "remove"].contains(&sub(2).as_str()) =>
+        {
+            engine.playlist_names()
+        }
+        ("noteblockmusicplayer" | "nbmp", 4) if sub(1) == "playlist" && sub(2) == "add" => {
+            engine.song_files()
+        }
+        ("noteblockmusicplayer" | "nbmp", 4) if sub(1) == "playlist" && sub(2) == "remove" => {
+            engine.playlist_entries(words[3]).unwrap_or_default()
+        }
+        _ => Vec::new(),
+    };
+    let mut out: Vec<String> = candidates
+        .into_iter()
+        .filter(|c| c.to_ascii_lowercase().starts_with(&current))
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
 fn radio_cmd(engine: &mut Engine, uuid: Option<u128>, args: &[&str]) -> Answer {
     match args.first().copied() {
         Some("toggle") => match uuid {

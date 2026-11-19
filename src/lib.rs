@@ -14,7 +14,7 @@ use crate::horizon_noteblock::engine::{Engine, Out, PlayerView, WorldView};
 use mod_api::{
     Command, CommandArgumentValue, CommandSource, Flow, Hooks, NodeDefault, PermissionGatherNodesEvent,
     PermissionLevel, PermissionNode, PermissionValueType, RegisterCommandsEvent, RunModCommandEvent,
-    ServerAboutToStartEvent, ServerHost, ServerTickEvent, ServerTickPhase, SoundSource, Text,
+    ServerAboutToStartEvent, ServerHost, ServerTickEvent, ServerTickPhase, SoundSource, Suggestion, TabCompleteEvent, Text,
 };
 use std::path::Path;
 use std::sync::Mutex;
@@ -102,6 +102,7 @@ struct Run {
     italic: bool,
     underlined: bool,
     strike: bool,
+    obfuscated: bool,
 }
 
 impl Run {
@@ -112,12 +113,12 @@ impl Run {
         piece.style.italic = self.italic.then_some(true);
         piece.style.underlined = self.underlined.then_some(true);
         piece.style.strikethrough = self.strike.then_some(true);
+        piece.style.obfuscated = self.obfuscated.then_some(true);
         piece
     }
 }
 
-/// A line with `§` codes as a component tree. A colour code clears the styles before it, as Minecraft does;
-/// `§k` (obfuscated) is dropped.
+/// A line with `§` codes as a component tree. A colour code clears the styles before it, as Minecraft does.
 fn styled(line: &str) -> Text {
     let mut root = Text::literal("");
     let mut run = Run::default();
@@ -139,7 +140,7 @@ fn styled(line: &str) -> Text {
             'o' => Run { italic: true, ..run },
             'n' => Run { underlined: true, ..run },
             'm' => Run { strike: true, ..run },
-            'k' => run,
+            'k' => Run { obfuscated: true, ..run },
             other => match colour(other) {
                 Some(name) => Run { color: Some(name), ..Run::default() },
                 None => run,
@@ -177,7 +178,9 @@ impl Hooks for Mod {
 
     fn server_about_to_start(&self, _: &mut dyn ServerHost, _: &mut ServerAboutToStartEvent) {
         let level = level_name();
-        let mut engine = Engine::load(Path::new(FOLDER), vec![level.clone()], seed());
+        // Bukkit's three world names of the level: a world radio may name the nether or the end.
+        let worlds = vec![level.clone(), format!("{level}_nether"), format!("{level}_the_end")];
+        let mut engine = Engine::load(Path::new(FOLDER), worlds, seed());
         for line in engine.take_log() {
             log(&line);
         }
@@ -187,7 +190,7 @@ impl Hooks for Mod {
 
     fn register_commands(&self, _: &mut dyn ServerHost, event: &mut RegisterCommandsEvent<'_>) {
         // Every root takes the rest of the line; the original's usages and levels are checked in `run_mod_command`.
-        // This loses tab completion of the sub-commands (the server only sees `[args:text]`).
+        // Tab completion of the sub-commands, radios, playlists and songs is `tab_complete` below.
         for root in roots() {
             event.commands.push(Command::new(&format!("{root} [args:text]")));
         }
@@ -208,32 +211,28 @@ impl Hooks for Mod {
             line.push(' ');
             line.push_str(args);
         }
+        // The console, RCON, command blocks and functions have every permission, as Bukkit's console does; the
+        // player controls (`/radio toggle|volume`) need a player and answer nothing without one.
         let player = match &event.source {
-            CommandSource::Player { player, .. } => *player,
-            _ => {
-                // Console use was never ported (the Java plugin's console path is not in the perform hook).
-                let _ = host.commands().feedback(Text::literal(
-                    "NoteBlockMusicPlayer commands are for players in this port.",
-                ));
-                return Flow::Cancel;
-            }
+            CommandSource::Player { player, .. } => Some(*player),
+            _ => None,
         };
-        let uuid = player.uuid();
+        let uuid = player.map(|p| p.uuid());
         // The original asks the node of the matched usage (`radio.toggle`, `nbmp.admin`, ...) with `hasPermission`.
         // The node's default (declared in `permission_gather_nodes`) decides unless the handler answers; any error
         // is a denial. The query runs before the engine lock, since it needs the host.
-        let granted = match commands::needs(&line) {
-            Some((node, _)) => player
+        let granted = match (player, commands::needs(&line)) {
+            (Some(player), Some((node, _))) => player
                 .permission_bool(&mut *host, &PermissionNode::new(node, PermissionValueType::Boolean))
                 .unwrap_or(false),
-            None => true,
+            _ => true,
         };
         let answer = {
             let mut slot = self.loaded.lock().unwrap_or_else(|e| e.into_inner());
             let Some(loaded) = slot.as_mut() else {
                 return Flow::Continue;
             };
-            let answer = loaded.engine.command_checked(Some(uuid), &line, |_, _| granted);
+            let answer = loaded.engine.command_checked(uuid, &line, |_, _| granted);
             for log_line in loaded.engine.take_log() {
                 log(&log_line);
             }
@@ -246,6 +245,23 @@ impl Hooks for Mod {
             let _ = host.commands().feedback(styled(&reply));
         }
         Flow::Cancel
+    }
+
+    fn tab_complete(&self, _: &mut dyn ServerHost, event: &mut TabCompleteEvent<'_>) {
+        let line = event.command.trim_start_matches('/');
+        let Some(root) = line.split(' ').next() else { return };
+        if !roots().iter().any(|r| r.eq_ignore_ascii_case(root)) {
+            return;
+        }
+        let slot = self.loaded.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(loaded) = slot.as_ref() else { return };
+        let end = event.command.len();
+        let start = event.command.rfind(' ').map_or(0, |i| i + 1);
+        for name in commands::complete(&loaded.engine, line) {
+            if !event.suggestions.iter().any(|s| s.text.eq_ignore_ascii_case(&name)) {
+                event.suggestions.push(Suggestion::new((start, end), name));
+            }
+        }
     }
 
     fn server_tick(&self, host: &mut dyn ServerHost, event: &mut ServerTickEvent<'_>) {

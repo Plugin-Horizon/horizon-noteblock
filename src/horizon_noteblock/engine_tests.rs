@@ -305,3 +305,31 @@ fn a_song_missing_from_the_folder_cannot_be_added() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn player_volume_survives_a_logout_only_with_save_player_volumes() {
+    let mut engine = Engine::load(&fixture_dir(), vec!["fixture_world".to_string()], 1);
+    let here = world_view(&[(5, "minecraft:overworld", [0.0, 0.0, 0.0])]);
+    let away = world_view(&[]);
+    engine.tick(&here);
+    engine.set_volume(5, 40);
+    engine.tick(&away);
+    assert_eq!(engine.player_volume(5), 100, "default volume after a logout");
+    engine.cfg.save_player_volumes = true;
+    engine.tick(&here);
+    engine.set_volume(5, 40);
+    engine.tick(&away);
+    assert_eq!(engine.player_volume(5), 40);
+}
+
+#[test]
+fn nether_and_end_world_radios_pass_the_world_check() {
+    let level = "fixture_world";
+    let worlds = vec![level.to_string(), format!("{level}_nether"), format!("{level}_the_end")];
+    let mut engine = Engine::load(&fixture_dir(), worlds, 1);
+    engine.library_mut().insert("tone_n", tone(1));
+    let mut spec = radio(Kind::World, "nether_radio", &["tone_n"], 100);
+    spec.world = "fixture_world_nether".to_string();
+    let idx = engine.add_radio(spec);
+    assert!(engine.problem(idx).is_none());
+}
