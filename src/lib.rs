@@ -11,6 +11,7 @@
 pub mod horizon_noteblock;
 use crate::horizon_noteblock::commands;
 use crate::horizon_noteblock::engine::{Engine, Out, PlayerView, WorldView};
+use crate::horizon_noteblock::radio::MS_PER_SERVER_TICK;
 use mod_api::{
     Command, CommandArgumentValue, CommandSource, Flow, Hooks, NodeDefault, PermissionGatherNodesEvent,
     PermissionLevel, PermissionNode, PermissionValueType, RegisterCommandsEvent, RunModCommandEvent,
@@ -18,7 +19,7 @@ use mod_api::{
 };
 use std::path::Path;
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 /// The plugin folder, relative to the server folder (the game's working directory).
 const FOLDER: &str = "plugins/NoteBlockMusicPlayer";
@@ -27,6 +28,8 @@ struct Loaded {
     /// The level's folder name, which the radios' worlds are compared with.
     level: String,
     engine: Engine,
+    /// When the radios last ran: the song clock counts the real time between two ticks.
+    last_tick: Option<Instant>,
 }
 
 #[derive(Default)]
@@ -199,7 +202,7 @@ impl Hooks for Mod {
             log(&line);
         }
         log(&format!("{FOLDER} read for level {level}"));
-        *self.loaded.lock().unwrap_or_else(|e| e.into_inner()) = Some(Loaded { level, engine });
+        *self.loaded.lock().unwrap_or_else(|e| e.into_inner()) = Some(Loaded { level, engine, last_tick: None });
     }
 
     fn register_commands(&self, _: &mut dyn ServerHost, event: &mut RegisterCommandsEvent<'_>) {
@@ -299,7 +302,14 @@ impl Hooks for Mod {
                     })
                     .collect(),
             };
-            let outs = loaded.engine.tick(&view);
+            // Real time since the last tick drives the song clock (the first tick counts one server tick).
+            let now = Instant::now();
+            let elapsed_ms = match loaded.last_tick {
+                Some(last) => now.duration_since(last).as_secs_f32() * 1000.0,
+                None => MS_PER_SERVER_TICK,
+            };
+            loaded.last_tick = Some(now);
+            let outs = loaded.engine.tick_for(&view, elapsed_ms);
             for line in loaded.engine.take_log() {
                 log(&line);
             }

@@ -10,7 +10,7 @@ use crate::horizon_noteblock::instrument;
 use crate::horizon_noteblock::library::Library;
 use crate::horizon_noteblock::messages::{self, Messages};
 use crate::horizon_noteblock::pitch;
-use crate::horizon_noteblock::radio::{Event, Kind, Radio, RadioSpec, Rng};
+use crate::horizon_noteblock::radio::{Event, Kind, Radio, RadioSpec, Rng, MS_PER_SERVER_TICK};
 use crate::horizon_noteblock::yaml::{self, Document, Node};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -45,6 +45,17 @@ pub enum Out {
         uuid: u128,
         line: String,
     },
+}
+
+/// NoteBlockAPI's song player events, for code in this binary (see `api`). `radio` is the radio's name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SongEvent {
+    /// A song starts (`SongStartedEvent`).
+    Started { radio: String, song: String },
+    /// A song ends, by running out or by `skip` (`SongEndedEvent`).
+    Ended { radio: String, song: String },
+    /// A radio is switched off while it may play (`SongStoppedEvent`).
+    Stopped { radio: String },
 }
 
 /// Bukkit's world name for a player in `level` in this dimension.
@@ -87,6 +98,7 @@ pub struct Engine {
     muted: HashSet<u128>,
     present: HashSet<u128>,
     log: Vec<String>,
+    events: Vec<SongEvent>,
 }
 
 impl Engine {
@@ -108,6 +120,7 @@ impl Engine {
             muted: HashSet::new(),
             present: HashSet::new(),
             log: Vec::new(),
+            events: Vec::new(),
         };
         let files = config::load_files(dir);
         engine.apply(files);
@@ -117,6 +130,20 @@ impl Engine {
     /// Lines for the console (what the loading and the checks said), taken once.
     pub fn take_log(&mut self) -> Vec<String> {
         std::mem::take(&mut self.log)
+    }
+
+    /// The song events since the last call, in order.
+    pub fn take_song_events(&mut self) -> Vec<SongEvent> {
+        std::mem::take(&mut self.events)
+    }
+
+    /// Queues a song event. Without a taker the oldest ones go after 1024, so an idle queue cannot grow forever.
+    fn push_event(&mut self, event: SongEvent) {
+        const MAX_QUEUED: usize = 1024;
+        if self.events.len() >= MAX_QUEUED {
+            self.events.remove(0);
+        }
+        self.events.push(event);
     }
 
     fn note(&mut self, text: String) {
@@ -281,14 +308,25 @@ impl Engine {
         }
     }
 
-    fn find(&self, kind: Kind, name: &str) -> Option<usize> {
+    pub(crate) fn find(&self, kind: Kind, name: &str) -> Option<usize> {
         self.radios
             .iter()
             .position(|r| r.kind == kind && r.name == name)
     }
 
-    /// The radios: the sounds and action bar lines for this server tick.
+    /// The song a radio plays now, if it plays one.
+    pub fn current_song(&self, kind: Kind, name: &str) -> Option<String> {
+        let idx = self.find(kind, name)?;
+        self.radios[idx].current_song().map(str::to_owned)
+    }
+
+    /// The radios: the sounds and action bar lines for one server tick (50 ms of time, see `tick_for`).
     pub fn tick(&mut self, view: &WorldView) -> Vec<Out> {
+        self.tick_for(view, MS_PER_SERVER_TICK)
+    }
+
+    /// The radios: the sounds and action bar lines for `elapsed_ms` of real time since the last call.
+    pub fn tick_for(&mut self, view: &WorldView, elapsed_ms: f32) -> Vec<Out> {
         let mut out = Vec::new();
         let now: HashSet<u128> = view.players.iter().map(|p| p.uuid).collect();
         let gone: Vec<u128> = self
@@ -310,11 +348,17 @@ impl Engine {
             }
             let events = {
                 let radio = &mut self.radios[idx];
-                radio.step(&self.library, &mut self.rng)
+                radio.step_for(&self.library, &mut self.rng, elapsed_ms)
             };
             for event in events {
                 match event {
+                    Event::End { song } => {
+                        let radio = self.radios[idx].name.clone();
+                        self.push_event(SongEvent::Ended { radio, song });
+                    }
                     Event::Start { song } => {
+                        let radio = self.radios[idx].name.clone();
+                        self.push_event(SongEvent::Started { radio, song: song.clone() });
                         if !self.radios[idx].actionbar {
                             continue;
                         }
@@ -455,6 +499,9 @@ impl Engine {
             return self.prefixed("command_radio_notfound", &radio_vars(kind, name));
         };
         if !on {
+            if self.radios[idx].enabled {
+                self.push_event(SongEvent::Stopped { radio: name.to_string() });
+            }
             self.radios[idx].stop();
             return self.prefixed("command_state_disable", &radio_vars(kind, name));
         }
@@ -489,7 +536,9 @@ impl Engine {
             None => String::new(),
         };
         let rng = &mut self.rng;
-        self.radios[idx].skip(rng);
+        if let Some(song) = self.radios[idx].skip(rng) {
+            self.push_event(SongEvent::Ended { radio: name.to_string(), song });
+        }
         let mut vars = radio_vars(kind, name);
         vars.push(("song_title", title));
         self.prefixed("command_skip_song", &vars)

@@ -1,8 +1,8 @@
 //! One radio: its playlist, the playback clock of its current song and the order of its songs.
 //!
-//! The clock is NoteBlockAPI's: a song tick every `20 / tempo` server ticks, ticks `0` to `length` (inclusive) are
-//! played, then the song ends. Between songs the radio waits `delay` ticks. The order is the playlist's (repeat
-//! starts it again) or random (every song once, then again with repeat, else the radio goes idle).
+//! The clock is NoteBlockAPI's and runs on real time: a song tick every `1000 / tempo` milliseconds, ticks `0` to
+//! `length` (inclusive) are played, then the song ends. Between songs the radio waits `delay` seconds. The order is
+//! the playlist's (repeat starts it again) or random (every song once, then again with repeat, else the radio goes idle).
 
 use crate::horizon_noteblock::library::Library;
 
@@ -35,14 +35,23 @@ impl Kind {
     }
 }
 
-/// What a radio did on one server tick.
+/// What a radio did on one step.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event {
     /// A song starts (its action bar goes out, when the radio has `actionbar`).
     Start { song: String },
     /// The notes of one song tick are played to the listeners.
     Tick { song: String, tick: i32 },
+    /// The song ran to its length and ended on its own (a skip is not reported here).
+    End { song: String },
 }
+
+/// Milliseconds of one server tick (20 per second): what `Radio::step` and `Engine::tick` count when they are not
+/// given the real time.
+pub const MS_PER_SERVER_TICK: f32 = 50.0;
+
+/// The most real time one step counts. A stalled server then does not play a burst of catch-up notes.
+pub const MAX_STEP_MS: f32 = 200.0;
 
 /// The random source of the radios (xorshift64), seeded by the server.
 #[derive(Clone, Debug)]
@@ -108,22 +117,25 @@ pub struct Radio {
     pub repeat: bool,
     pub random: bool,
     pub actionbar: bool,
-    pub delay_ticks: u32,
+    /// The wait between two songs, in milliseconds.
+    pub delay_ms: f32,
     pub volume: u8,
     pub enabled: bool,
     pub loaded: bool,
     pending: Option<usize>,
     current: Option<usize>,
     idle: bool,
-    wait: u32,
+    /// Milliseconds left to wait before the next song.
+    wait: f32,
     tick: i32,
+    /// Milliseconds of real time since the last song tick.
     acc: f32,
     played: Vec<bool>,
 }
 
-/// Server ticks per song tick (`20 / tempo`; 2 for a zero tempo).
+/// Milliseconds per song tick (`1000 / tempo`; two server ticks for a zero tempo).
 fn period_of(tempo: f32) -> f32 {
-    if tempo > 0.0 { 20.0 / tempo } else { 2.0 }
+    if tempo > 0.0 { 1000.0 / tempo } else { 2.0 * MS_PER_SERVER_TICK }
 }
 
 impl Radio {
@@ -140,14 +152,14 @@ impl Radio {
             repeat: spec.repeat,
             random: spec.random,
             actionbar: spec.actionbar,
-            delay_ticks: (spec.delay_secs.max(0.0) * 20.0).round() as u32,
+            delay_ms: (spec.delay_secs.max(0.0) * 1000.0) as f32,
             volume: spec.volume.min(100),
             enabled: false,
             loaded: false,
             pending: None,
             current: None,
             idle: false,
-            wait: 0,
+            wait: 0.0,
             tick: -1,
             acc: 0.0,
             played: vec![false; n],
@@ -179,7 +191,7 @@ impl Radio {
         self.enabled = true;
         self.idle = false;
         self.current = None;
-        self.wait = 0;
+        self.wait = 0.0;
         self.tick = -1;
         self.acc = 0.0;
         self.pending = self.first_index(rng);
@@ -194,7 +206,7 @@ impl Radio {
         self.current = None;
         self.pending = None;
         self.idle = false;
-        self.wait = 0;
+        self.wait = 0.0;
         self.tick = -1;
         self.acc = 0.0;
     }
@@ -212,8 +224,8 @@ impl Radio {
         let per = period_of(entry.song.tempo);
         self.current = Some(index);
         self.tick = -1;
-        // One step of `acc` per server tick: starting one short makes the first song tick come now.
-        self.acc = per - 1.0;
+        // Starting one server tick short makes the first song tick come on the first normal step.
+        self.acc = per - MS_PER_SERVER_TICK;
         if self.random {
             self.played[index] = true;
         }
@@ -254,7 +266,7 @@ impl Radio {
 
     fn end_song(&mut self, rng: &mut Rng) {
         let finished = self.current.take();
-        self.wait = self.delay_ticks;
+        self.wait = self.delay_ms;
         self.acc = 0.0;
         match self.next_after(finished, rng) {
             Some(i) => self.pending = Some(i),
@@ -265,15 +277,21 @@ impl Radio {
         }
     }
 
-    /// One server tick: starts a song when the wait is over, and returns the song ticks due now.
+    /// One server tick (`MS_PER_SERVER_TICK` of time): see `step_for`.
     pub fn step(&mut self, lib: &Library, rng: &mut Rng) -> Vec<Event> {
+        self.step_for(lib, rng, MS_PER_SERVER_TICK)
+    }
+
+    /// `elapsed_ms` of real time: starts a song when the wait is over, and returns the song ticks due now.
+    pub fn step_for(&mut self, lib: &Library, rng: &mut Rng, elapsed_ms: f32) -> Vec<Event> {
         let mut out = Vec::new();
         if !self.enabled || self.idle {
             return out;
         }
+        let elapsed = elapsed_ms.clamp(0.0, MAX_STEP_MS);
         if self.current.is_none() {
-            if self.wait > 0 {
-                self.wait -= 1;
+            if self.wait > 0.0 {
+                self.wait -= elapsed;
                 return out;
             }
             let Some(next) = self.pending.take() else {
@@ -302,11 +320,12 @@ impl Radio {
         };
         let per = period_of(entry.song.tempo);
         let length = entry.song.length;
-        self.acc += 1.0;
+        self.acc += elapsed;
         while self.acc >= per {
             self.acc -= per;
             self.tick += 1;
             if self.tick > length {
+                out.push(Event::End { song: name.clone() });
                 self.end_song(rng);
                 break;
             }
@@ -508,8 +527,51 @@ mod tests {
 
     #[test]
     fn period_follows_tempo() {
-        assert_eq!(period_of(10.0), 2.0);
-        assert_eq!(period_of(5.0), 4.0);
-        assert_eq!(period_of(0.0), 2.0);
+        assert_eq!(period_of(10.0), 100.0);
+        assert_eq!(period_of(5.0), 200.0);
+        assert_eq!(period_of(0.0), 100.0);
+    }
+
+    #[test]
+    fn song_ticks_follow_real_time_not_server_ticks() {
+        // Tempo 10: a song tick every 100 ms. Steps of 25 ms (a fast server) give one every 4 steps.
+        let lib = library_with(&[("tone", 3)]);
+        let mut radio = Radio::new(spec(&["tone"], false, false, 0.0));
+        let mut rng = Rng::new(7);
+        radio.start(&mut rng);
+        let mut ticks = Vec::new();
+        for t in 0..16 {
+            for e in radio.step_for(&lib, &mut rng, 25.0) {
+                if let Event::Tick { tick, .. } = e {
+                    ticks.push((t, tick));
+                }
+            }
+        }
+        // A start holds 50 ms, the first step adds 25 (75 ms), the second reaches 100 ms: tick 0 on step 1.
+        assert_eq!(ticks, vec![(1, 0), (5, 1), (9, 2), (13, 3)]);
+    }
+
+    #[test]
+    fn a_stalled_step_counts_at_most_the_cap() {
+        // A 10 s stall at tempo 10 would be 100 song ticks; the cap lets through 200 ms = two song ticks.
+        let lib = library_with(&[("tone", 50)]);
+        let mut radio = Radio::new(spec(&["tone"], false, false, 0.0));
+        let mut rng = Rng::new(7);
+        radio.start(&mut rng);
+        let _ = radio.step_for(&lib, &mut rng, 0.0);
+        let events = radio.step_for(&lib, &mut rng, 10_000.0);
+        let n = events.iter().filter(|e| matches!(e, Event::Tick { .. })).count();
+        assert_eq!(n, 2, "{events:?}");
+    }
+
+    #[test]
+    fn a_song_that_runs_out_reports_its_end() {
+        let lib = library_with(&[("tone", 1)]);
+        let mut radio = Radio::new(spec(&["tone"], false, false, 0.0));
+        let mut rng = Rng::new(7);
+        radio.start(&mut rng);
+        let events = run(&mut radio, &lib, &mut rng, 20);
+        let ends: Vec<&Event> = events.iter().map(|(_, e)| e).filter(|e| matches!(e, Event::End { .. })).collect();
+        assert_eq!(ends, vec![&Event::End { song: "tone".to_string() }]);
     }
 }
