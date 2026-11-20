@@ -60,11 +60,25 @@ fn level_name() -> String {
 /// carry it, and on Paper the proxy's `/sr` answers first); `/serverradio` stays for the server radio.
 const GIVEN_AWAY: [&str; 1] = ["sr"];
 
+/// Whether `/sr` is this mod's too: `register_sr = true` in `config/noteblock.toml` (a plain `key = value` line).
+/// Off by default, because the SkinsRestorer port answers `/sr` on a network.
+fn register_sr() -> bool {
+    std::fs::read_to_string("config/noteblock.toml")
+        .map(|text| {
+            text.lines().any(|line| {
+                let line = line.split('#').next().unwrap_or("").replace(' ', "");
+                line == "register_sr=true"
+            })
+        })
+        .unwrap_or(false)
+}
+
 fn roots() -> Vec<String> {
+    let sr = register_sr();
     let mut roots: Vec<String> = commands::usages()
         .into_iter()
         .filter_map(|usage| usage.usage.split_whitespace().next().map(str::to_owned))
-        .filter(|root| !GIVEN_AWAY.contains(&root.as_str()))
+        .filter(|root| sr || !GIVEN_AWAY.contains(&root.as_str()))
         .collect();
     roots.sort();
     roots.dedup();
@@ -296,7 +310,7 @@ impl Hooks for Mod {
                 // NoteBlockAPI's MonoMode: the note is played where the listener stands, for them only.
                 Out::Sound { uuid, sound, volume, pitch } => {
                     if let Some(p) = players.iter().find(|p| p.uuid() == uuid) {
-                        p.play_sound(host, sound, SoundSource::Master, volume, pitch);
+                        p.play_sound(host, &sound, SoundSource::Master, volume, pitch);
                     }
                 }
                 Out::ActionBar { uuid, line } => {

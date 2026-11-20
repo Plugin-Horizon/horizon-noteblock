@@ -37,7 +37,7 @@ pub struct WorldView {
 pub enum Out {
     Sound {
         uuid: u128,
-        sound: &'static str,
+        sound: String,
         volume: f32,
         pitch: f32,
     },
@@ -147,7 +147,7 @@ impl Engine {
         self.holograms = holograms;
         self.library = Library::new(self.dir.join("songs"), songs);
         if self.cfg.use_10_octave_range {
-            self.log.push("use10OctaveRange is set: notes are played in the base octave without NoteBlockAPI's warped sounds".to_string());
+            self.log.push("use10OctaveRange is set: notes outside the two octaves use the suffixed sounds (`_-2`, `_-1`, `_1`, `_2`) of the resource pack".to_string());
         }
         let mut names: Vec<String> = Vec::new();
         for (_, list) in &self.playlists {
@@ -343,12 +343,28 @@ impl Engine {
                         for uuid in self.audience(idx, view) {
                             let player_volume = self.player_volume(uuid);
                             for (layer, note) in notes {
-                                let Some(sound) = instrument::sound_name(note.instrument) else {
-                                    continue;
+                                let ten = self.cfg.use_10_octave_range;
+                                let (key, fine) = (note.key as i32, note.pitch as i32);
+                                // A custom instrument plays its sound file's name (NoteBlockAPI's
+                                // `CustomInstrument`); a vanilla one its note block sound.
+                                let base: String = if instrument::is_custom(note.instrument) {
+                                    let at = (note.instrument as usize).wrapping_sub(instrument::FIRST_CUSTOM as usize);
+                                    let Some(custom) = entry.song.custom_instruments.get(at) else {
+                                        continue;
+                                    };
+                                    instrument::custom_sound(&custom.file)
+                                } else {
+                                    let Some(sound) = instrument::sound_name(note.instrument) else {
+                                        continue;
+                                    };
+                                    sound.to_owned()
                                 };
-                                if instrument::is_custom(note.instrument) {
-                                    continue;
-                                }
+                                // With `use10OctaveRange` a note outside the two octaves uses the suffixed sound.
+                                let sound = if ten && (instrument::is_custom(note.instrument) || instrument::out_of_range(key, fine)) {
+                                    instrument::warp_name(&base, key, fine)
+                                } else {
+                                    base
+                                };
                                 let layer_volume = entry
                                     .song
                                     .layers

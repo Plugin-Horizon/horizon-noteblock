@@ -38,6 +38,41 @@ pub fn sound_name(instrument: i8) -> Option<&'static str> {
     SOUNDS.get(instrument as usize).copied()
 }
 
+/// The sound a custom instrument plays: its file name without `.ogg` (NoteBlockAPI's `CustomInstrument`), a bare
+/// name in the `minecraft` namespace; `pling` is the vanilla pling.
+pub fn custom_sound(file: &str) -> String {
+    let name = file.replace(".ogg", "");
+    if name.eq_ignore_ascii_case("pling") || name.eq_ignore_ascii_case("block.note_block.pling") {
+        return "minecraft:block.note_block.pling".to_owned();
+    }
+    if name.contains(':') { name } else { format!("minecraft:{name}") }
+}
+
+/// `NoteUtils.isOutOfRange`: the key with its pitch applied is outside keys 33 to 56.
+pub fn out_of_range(key: i32, pitch: i32) -> bool {
+    let key = key + pitch / 100;
+    !(33..57).contains(&key)
+}
+
+/// `InstrumentUtils.warpNameOutOfRange`: the suffix of the octave the key falls in.
+pub fn warp_name(name: &str, key: i32, pitch: i32) -> String {
+    let key = key + pitch / 100;
+    let suffix = if key < 9 {
+        "_-2"
+    } else if key < 33 {
+        "_-1"
+    } else if key < 57 {
+        ""
+    } else if key < 81 {
+        "_1"
+    } else if key < 105 {
+        "_2"
+    } else {
+        ""
+    };
+    format!("{name}{suffix}")
+}
+
 /// Whether the id is a custom instrument (NoteBlockAPI's `isCustomInstrument`).
 pub fn is_custom(instrument: i8) -> bool {
     instrument >= FIRST_CUSTOM as i8
@@ -57,6 +92,18 @@ mod tests {
             sound_name(19),
             Some("minecraft:block.note_block.trumpet_oxidized")
         );
+    }
+
+    #[test]
+    fn custom_sounds_and_warped_names() {
+        assert_eq!(custom_sound("drum.ogg"), "minecraft:drum");
+        assert_eq!(custom_sound("Pling.ogg"), "minecraft:block.note_block.pling");
+        assert_eq!(custom_sound("pack:kick"), "pack:kick");
+        assert_eq!(warp_name("minecraft:block.note_block.harp", 20, 0), "minecraft:block.note_block.harp_-1");
+        assert_eq!(warp_name("x", 45, 0), "x");
+        assert_eq!(warp_name("x", 60, 0), "x_1");
+        assert_eq!(warp_name("x", 4, 0), "x_-2");
+        assert!(out_of_range(32, 0) && !out_of_range(33, 0) && !out_of_range(56, 0) && out_of_range(57, 0));
     }
 
     #[test]

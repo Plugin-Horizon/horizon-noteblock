@@ -52,11 +52,15 @@ horizon-launcher native-build <path to this folder> --server-output <dir> --vers
 
 What does not work yet on arismoko/horizon (each is marked `TODO(arismoko-api: ...)` in `src/lib.rs`):
 
-- Per-sub-command operator levels are not part of the command tree (the nodes are checked when the command runs);
-  tab completion lists every sub-command whatever the permission.
-- `/sr` is left to the SkinsRestorer port; use `/serverradio`.
-- Not ported: holograms, custom instruments (id 20 and up), `use10OctaveRange` sound-name suffixes, fade in/out,
-  stereo/panning, song player events and the library API for other mods. Timing follows server ticks, not real time.
+- Per-sub-command operator levels are not part of the command tree (every root takes the rest of the line; the
+  nodes are checked when the command runs, which keeps the plugin's own messages); tab completion lists every
+  sub-command whatever the permission.
+- `/sr` is left to the SkinsRestorer port unless `register_sr = true` is set in `config/noteblock.toml`; use
+  `/serverradio` otherwise.
+- Custom instruments play their sound file's name from the resource pack; with `use10OctaveRange: true` notes
+  outside the two octaves use the `_-2`, `_-1`, `_1`, `_2` suffixed sounds.
+- Not ported: holograms (no per-viewer entity API), fade in/out, stereo/panning, song player events and the library
+  API for other mods. Timing follows server ticks, not real time. Notes play at the listener, not at the eye.
 
 ## Licence and sources
 

@@ -49,7 +49,7 @@ fn radio(kind: Kind, name: &str, songs: &[&str], volume: u8) -> RadioSpec {
     }
 }
 
-fn sounds_to(outs: &[Out], uuid: u128) -> Vec<(f32, f32, &'static str)> {
+fn sounds_to(outs: &[Out], uuid: u128) -> Vec<(f32, f32, String)> {
     outs.iter()
         .filter_map(|o| match o {
             Out::Sound {
@@ -57,7 +57,7 @@ fn sounds_to(outs: &[Out], uuid: u128) -> Vec<(f32, f32, &'static str)> {
                 sound,
                 volume,
                 pitch,
-            } if *u == uuid => Some((*volume, *pitch, *sound)),
+            } if *u == uuid => Some((*volume, *pitch, sound.clone())),
             _ => None,
         })
         .collect()
@@ -150,7 +150,7 @@ fn world_radio_plays_to_players_of_its_world_only() {
     );
     assert!(per_tick.iter().all(|outs| sounds_to(outs, 2).is_empty()));
     assert!(per_tick.iter().all(|outs| sounds_to(outs, 3).is_empty()));
-    let (volume, pitch, sound) = sounds_to(&per_tick[0], 1)[0];
+    let (volume, pitch, sound) = sounds_to(&per_tick[0], 1)[0].clone();
     assert!((volume - 1.0).abs() < 1e-6);
     assert!((pitch - 1.0).abs() < 1e-6, "key 45 is the base pitch");
     assert_eq!(sound, "minecraft:block.note_block.harp");
@@ -169,7 +169,7 @@ fn player_volume_and_radio_volume_scale_the_sound() {
     assert!(answer.lines[0].contains("50"));
     let view = world_view(&[(1, "minecraft:overworld", [0.0, 0.0, 0.0])]);
     let outs = engine.tick(&view);
-    let (volume, _, _) = sounds_to(&outs, 1)[0];
+    let (volume, _, _) = sounds_to(&outs, 1)[0].clone();
     // layer 100 * radio 80 * player 50 * velocity 100 / 1e8 = 0.4
     assert!((volume - 0.4).abs() < 1e-6, "{volume}");
 }
