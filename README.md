@@ -27,7 +27,9 @@ This is a native trait mod: `horizon-mod.toml`, a `Cargo.toml` that depends on `
 - **Titles**: `songs.yml` title and author first (block scalars such as `|2-` included), then the song's own title,
   then the file name. Action bar `You are now listening %song_title%` when a song starts (`actionbar: true`).
 - **Player state**: `/radio toggle` (mute all radios for you), `/radio volume <0-100>`; the default volume from
-  `config.yml`. Kept across log-outs while the server runs when `savePlayerVolumes: true` (not written to disk).
+  `config.yml`. Kept in memory across log-outs while the server runs; with `savePlayerVolumes: true` written to
+  `playerVolumes.yml` and read at the next start.
+- **Joins**: a player who joins a radio's audience sees the action bar of its song (the first radio in the file's order).
 - **Commands**: `/radio`, `/worldradio` (`wr`), `/serverradio` (`sr`), `/positionradio` (`pr`), `/noteblockmusicplayer`
   (`nbmp`): enable, disable, skip, reload, playlist list/songs/create/add/remove/reload, hologram (answers "not
   enabled"). Permission nodes from `plugin.yml`. `playlists.yml` is written back in place on create/add/remove, as
@@ -59,9 +61,12 @@ What does not work yet on arismoko/horizon (each is marked `TODO(arismoko-api: .
   `/serverradio` otherwise.
 - Custom instruments play their sound file's name from the resource pack; with `use10OctaveRange: true` notes
   outside the two octaves use the `_-2`, `_-1`, `_1`, `_2` suffixed sounds.
-- Not ported: holograms (no per-viewer entity API), fade in/out (NoteBlockAPI's default is off and NBMP has no fade
-  key), stereo/panning (no per-player sound position in the host API). Song events and the API are plain Rust functions
-  (`horizon_noteblock::api`, `engine::SongEvent`), not a mod API. Notes play at the listener, not at the eye.
+- Not ported: holograms (no per-viewer entity API; `summon` exists, per-viewer visibility is upstream PR #18742), the
+  PlaceholderAPI expansion of NBMP (no `placeholder_register`), fade in/out (NoteBlockAPI's default is off and NBMP has
+  no fade key), stereo/panning (no per-player sound position in the host API). Song events and the API are plain Rust
+  functions (`horizon_noteblock::api`, `engine::SongEvent`), not a mod API. Notes play at the listener, not at the eye.
+- The child permission nodes follow plugin.yml's `childrens` (granted by the parent); whether Bukkit reads that
+  spelling was not verified on a server.
 
 ## Licence and sources
 
