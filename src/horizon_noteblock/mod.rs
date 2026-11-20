@@ -6,6 +6,7 @@
 //! and sends the sounds and action bar lines it answers with. It reads the original plugin folder
 //! (`plugins/NoteBlockMusicPlayer/`) as it is.
 
+pub mod api;
 pub mod commands;
 pub mod config;
 pub mod engine;

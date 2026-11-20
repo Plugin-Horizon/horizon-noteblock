@@ -20,7 +20,7 @@ This is a native trait mod: `horizon-mod.toml`, a `Cargo.toml` that depends on `
   instruments (from 20) are read and not played.
 - **Pitch and volume**: NoteUtils' 2401-entry table, the two-octave window (`use10OctaveRange: false`, this server),
   the base-octave formula for `true`; volume = layer x radio x player x velocity (each 0 to 100, over 10^8).
-- **Clock**: a song tick every `20 / tempo` server ticks, ticks `0..=length`; `delay` seconds between songs.
+- **Clock**: real time, a song tick every `1000 / tempo` ms, ticks `0..=length`; `delay` seconds between songs.
 - **Radios**: world radios (players in the world), server radios (everyone), position radios (players within the
   radius of `x y z`); playlist order, `repeat`, `random`; one world radio per world and one server radio, as the
   messages say; the checks (playlist, songs, world) with the messages of `messages_en.yml`.
@@ -59,8 +59,9 @@ What does not work yet on arismoko/horizon (each is marked `TODO(arismoko-api: .
   `/serverradio` otherwise.
 - Custom instruments play their sound file's name from the resource pack; with `use10OctaveRange: true` notes
   outside the two octaves use the `_-2`, `_-1`, `_1`, `_2` suffixed sounds.
-- Not ported: holograms (no per-viewer entity API), fade in/out, stereo/panning, song player events and the library
-  API for other mods. Timing follows server ticks, not real time. Notes play at the listener, not at the eye.
+- Not ported: holograms (no per-viewer entity API), fade in/out (NoteBlockAPI's default is off and NBMP has no fade
+  key), stereo/panning (no per-player sound position in the host API). Song events and the API are plain Rust functions
+  (`horizon_noteblock::api`, `engine::SongEvent`), not a mod API. Notes play at the listener, not at the eye.
 
 ## Licence and sources
 
