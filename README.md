@@ -1,5 +1,9 @@
 # horizon-noteblock
 
+## Port status
+
+Compared with NoteBlockAPI 1.7.0 and NBMP 1.10.0: **77 %** of the original's commands, permissions, config keys, messages and features work today; **77 %** once our open Horizon PRs are merged; **77 %** with the engine changes we are writing; **77 %** with the newest Horizon SDK. Counted on 77/100 items (see HMOD_PORT.md). Status: not yet compiled after the 2026-11-20 round.
+
 > **Unofficial Rust port of NoteBlockMusicPlayer and NoteBlockAPI for the Horizon server (https://github.com/arismoko/horizon). Not affiliated with or endorsed by the NoteBlockMusicPlayer or NoteBlockAPI authors.**
 
 > **Built for and working only with [arismoko/horizon](https://github.com/arismoko/horizon)** (the Horizon fork that carries the mod API). [horizon-rust/horizon](https://github.com/horizon-rust/horizon) is experimental for mods and not supported: the earlier version for its native hooks / horizon-mixins is frozen on the `horizon-plain` branch (work stopped on 2026-11-12).
