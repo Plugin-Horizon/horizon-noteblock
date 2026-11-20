@@ -15,6 +15,24 @@ use crate::horizon_noteblock::yaml::{self, Document, Node};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+/// NBMP's per-player volume file, in the plugin folder (kept only with `savePlayerVolumes: true`).
+const PLAYER_VOLUMES_FILE: &str = "playerVolumes.yml";
+
+/// A player's UUID as Bukkit writes it in files: 8-4-4-4-12 lowercase hex digits.
+pub fn uuid_text(uuid: u128) -> String {
+    let hex = format!("{uuid:032x}");
+    format!("{}-{}-{}-{}-{}", &hex[0..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..32])
+}
+
+/// The UUID a file key names (dashed or not); `None` for anything that is not 32 hex digits.
+pub fn parse_uuid(text: &str) -> Option<u128> {
+    let hex: String = text.chars().filter(|c| *c != '-').collect();
+    if hex.len() != 32 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    u128::from_str_radix(&hex, 16).ok()
+}
+
 /// A player as the radios see them.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlayerView {
@@ -124,6 +142,9 @@ impl Engine {
         };
         let files = config::load_files(dir);
         engine.apply(files);
+        if engine.cfg.save_player_volumes {
+            engine.read_player_volumes();
+        }
         engine
     }
 
@@ -328,20 +349,21 @@ impl Engine {
     /// The radios: the sounds and action bar lines for `elapsed_ms` of real time since the last call.
     pub fn tick_for(&mut self, view: &WorldView, elapsed_ms: f32) -> Vec<Out> {
         let mut out = Vec::new();
-        let now: HashSet<u128> = view.players.iter().map(|p| p.uuid).collect();
-        let gone: Vec<u128> = self
-            .present
+        // NBMP's `onPlayerJoin`: a player who was not here at the last tick gets the action bar of the first radio
+        // that plays to them. Volume and mute are not dropped when a player leaves: NBMP's `PlayerVolume` map is
+        // never pruned, and the file keeps them only when `savePlayerVolumes` is on.
+        let joined: Vec<u128> = view
+            .players
             .iter()
-            .filter(|u| !now.contains(*u))
-            .copied()
+            .map(|p| p.uuid)
+            .filter(|uuid| !self.present.contains(uuid))
             .collect();
-        for uuid in gone {
-            if !self.cfg.save_player_volumes {
-                self.volumes.remove(&uuid);
+        self.present = view.players.iter().map(|p| p.uuid).collect();
+        for uuid in joined {
+            if let Some(line) = self.join_line(view, uuid) {
+                out.push(Out::ActionBar { uuid, line });
             }
-            self.muted.remove(&uuid);
         }
-        self.present = now;
         for idx in 0..self.radios.len() {
             if !self.radios[idx].enabled {
                 continue;
@@ -441,6 +463,31 @@ impl Engine {
         out
     }
 
+    /// The action bar line a player gets when they join: the song of the first enabled radio that has an action bar,
+    /// plays a song now and plays to them (NBMP shows its top-priority radio; the priorities are approximated by the
+    /// order of the radios).
+    fn join_line(&self, view: &WorldView, uuid: u128) -> Option<String> {
+        for idx in 0..self.radios.len() {
+            let radio = &self.radios[idx];
+            if !radio.enabled || !radio.actionbar {
+                continue;
+            }
+            let Some(song) = radio.current_song() else {
+                continue;
+            };
+            if !self.audience(idx, view).contains(&uuid) {
+                continue;
+            }
+            let title = self
+                .library
+                .get(song)
+                .map(|e| e.title.clone())
+                .unwrap_or_else(|| song.to_string());
+            return Some(self.messages.get("actionbar", &[("song_title", title)]));
+        }
+        None
+    }
+
     /// The players a radio plays to this tick: not muted, and in its world (and within its radius for a position
     /// radio).
     fn audience(&self, idx: usize, view: &WorldView) -> Vec<u128> {
@@ -469,6 +516,7 @@ impl Engine {
 
     pub fn set_volume(&mut self, uuid: u128, volume: u8) {
         self.volumes.insert(uuid, volume.min(100));
+        self.save_player_volumes();
     }
 
     pub fn is_muted(&self, uuid: u128) -> bool {
@@ -477,11 +525,66 @@ impl Engine {
 
     /// Mutes or unmutes every radio for one player (`/radio toggle`); true when now muted.
     pub fn toggle_mute(&mut self, uuid: u128) -> bool {
-        if self.muted.remove(&uuid) {
+        let now = if self.muted.remove(&uuid) {
             false
         } else {
             self.muted.insert(uuid);
             true
+        };
+        self.save_player_volumes();
+        now
+    }
+
+    /// Reads `playerVolumes.yml` when `savePlayerVolumes` is on: per player a `volume` and a `mute`, under
+    /// `playerVolumes` (NBMP's `PlayerVolume` file, keys as the UUID's text).
+    fn read_player_volumes(&mut self) {
+        let text = match std::fs::read_to_string(self.dir.join(PLAYER_VOLUMES_FILE)) {
+            Ok(text) => text,
+            Err(_) => return,
+        };
+        let doc = match yaml::parse_document(&text) {
+            Ok(doc) => doc,
+            Err(e) => {
+                self.log.push(format!("{PLAYER_VOLUMES_FILE} does not parse: {e}"));
+                return;
+            }
+        };
+        let Some(section) = doc.root.get("playerVolumes") else {
+            return;
+        };
+        let keys: Vec<String> = section.keys().map(str::to_owned).collect();
+        for key in keys {
+            let (Some(uuid), Some(entry)) = (parse_uuid(&key), section.get(&key)) else {
+                continue;
+            };
+            if let Some(volume) = entry.get("volume").and_then(|v| v.as_i64()) {
+                self.volumes.insert(uuid, volume.clamp(0, 100) as u8);
+            }
+            if entry.get("mute").and_then(|v| v.as_bool()).unwrap_or(false) {
+                self.muted.insert(uuid);
+            }
+        }
+    }
+
+    /// Writes `playerVolumes.yml` after a change, when `savePlayerVolumes` is on. Failures go to the log.
+    fn save_player_volumes(&mut self) {
+        if !self.cfg.save_player_volumes {
+            return;
+        }
+        let mut uuids: Vec<u128> = self.volumes.keys().chain(self.muted.iter()).copied().collect();
+        uuids.sort();
+        uuids.dedup();
+        let mut section = Node::map();
+        for uuid in uuids {
+            let mut entry = Node::map();
+            entry.set("volume", Node::int(i64::from(self.player_volume(uuid))));
+            entry.set("mute", Node::bool(self.muted.contains(&uuid)));
+            section.set(&uuid_text(uuid), entry);
+        }
+        let mut root = Node::map();
+        root.set("playerVolumes", section);
+        if let Err(e) = std::fs::write(self.dir.join(PLAYER_VOLUMES_FILE), yaml::write(&root)) {
+            self.log.push(format!("{PLAYER_VOLUMES_FILE} could not be saved: {e}"));
         }
     }
 

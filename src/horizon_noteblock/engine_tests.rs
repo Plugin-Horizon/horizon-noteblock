@@ -306,20 +306,75 @@ fn a_song_missing_from_the_folder_cannot_be_added() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// NBMP keeps a volume in memory after a logout; `playerVolumes.yml` is written and read only with
+/// `savePlayerVolumes: true` (the copy of the fixture takes the file, the fixture stays untouched).
 #[test]
-fn player_volume_survives_a_logout_only_with_save_player_volumes() {
-    let mut engine = Engine::load(&fixture_dir(), vec!["fixture_world".to_string()], 1);
+fn player_volume_is_kept_and_saved_with_save_player_volumes() {
+    let dir = std::env::temp_dir().join(format!("horizon-noteblock-volume-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    copy_fixture_to(&dir);
+    let mut engine = Engine::load(&dir, vec!["fixture_world".to_string()], 1);
     let here = world_view(&[(5, "minecraft:overworld", [0.0, 0.0, 0.0])]);
     let away = world_view(&[]);
     engine.tick(&here);
     engine.set_volume(5, 40);
     engine.tick(&away);
-    assert_eq!(engine.player_volume(5), 100, "default volume after a logout");
-    engine.cfg.save_player_volumes = true;
-    engine.tick(&here);
-    engine.set_volume(5, 40);
-    engine.tick(&away);
-    assert_eq!(engine.player_volume(5), 40);
+    assert_eq!(engine.player_volume(5), 40, "kept in memory after a logout");
+    assert!(!dir.join("playerVolumes.yml").exists(), "nothing is written without the flag");
+
+    let config = std::fs::read_to_string(dir.join("config.yml"))
+        .expect("config")
+        .replace("savePlayerVolumes: false", "savePlayerVolumes: true");
+    std::fs::write(dir.join("config.yml"), config).expect("write config");
+    let mut saving = Engine::load(&dir, vec!["fixture_world".to_string()], 1);
+    saving.set_volume(5, 60);
+    assert!(saving.toggle_mute(5));
+    let text = std::fs::read_to_string(dir.join("playerVolumes.yml")).expect("file written");
+    assert!(text.contains("playerVolumes:"), "{text}");
+    assert!(text.contains("volume: 60"), "{text}");
+    assert!(text.contains("mute: true"), "{text}");
+
+    let back = Engine::load(&dir, vec!["fixture_world".to_string()], 1);
+    assert_eq!(back.player_volume(5), 60, "read back at the next start");
+    assert!(back.is_muted(5));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn uuid_text_is_bukkits_dashed_form() {
+    let uuid: u128 = 0x0123456789abcdef0123456789abcdef;
+    assert_eq!(uuid_text(uuid), "01234567-89ab-cdef-0123-456789abcdef");
+    assert_eq!(parse_uuid("01234567-89ab-cdef-0123-456789abcdef"), Some(uuid));
+    assert_eq!(parse_uuid("0123456789abcdef0123456789abcdef"), Some(uuid));
+    assert_eq!(parse_uuid("not-a-uuid"), None);
+}
+
+#[test]
+fn a_joining_player_gets_the_action_bar_of_the_radio_that_plays_to_them() {
+    let mut engine = Engine::load(&fixture_dir(), vec!["fixture_world".to_string()], 1);
+    engine.library_mut().insert("tone_join", tone(40));
+    engine.add_radio(radio(Kind::World, "join", &["tone_join"], 100));
+    assert!(engine.command(None, "worldradio enable join").lines[0].contains("was set to enable"));
+    let alone = world_view(&[(1, "minecraft:overworld", [0.0, 100.0, 0.0])]);
+    engine.tick(&alone);
+    let joined = world_view(&[
+        (1, "minecraft:overworld", [0.0, 100.0, 0.0]),
+        (2, "minecraft:overworld", [0.0, 100.0, 0.0]),
+        (3, "minecraft:the_nether", [0.0, 100.0, 0.0]),
+    ]);
+    let bars: Vec<Out> = engine
+        .tick(&joined)
+        .into_iter()
+        .filter(|o| matches!(o, Out::ActionBar { .. }))
+        .collect();
+    // Player 2 joined the world radio's audience; player 1 was here already, player 3 is in the nether.
+    assert_eq!(
+        bars,
+        vec![Out::ActionBar {
+            uuid: 2,
+            line: "You are now listening Test".to_string()
+        }]
+    );
 }
 
 #[test]
