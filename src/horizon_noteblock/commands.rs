@@ -185,6 +185,47 @@ pub fn needs(line: &str) -> Option<(String, u8)> {
     Some((u.permission.clone()?, u.level))
 }
 
+/// plugin.yml's `childrens`: a node that grants the listed children (a player with the parent has the children).
+const CHILDREN: [(&str, &[&str]); 6] = [
+    ("radio.volume", &["radio.toggle"]),
+    (
+        "positionradio.admin",
+        &["positionradio.enable", "positionradio.skip", "positionradio.hologram"],
+    ),
+    ("worldradio.admin", &["worldradio.enable", "worldradio.skip"]),
+    ("serverradio.admin", &["serverradio.enable", "serverradio.skip"]),
+    (
+        "nbmp.playlist.admin",
+        &["nbmp.playlist.reload", "nbmp.playlist.list", "nbmp.playlist.create", "nbmp.playlist.add"],
+    ),
+    (
+        "nbmp.admin",
+        &[
+            "positionradio.admin",
+            "worldradio.admin",
+            "serverradio.admin",
+            "nbmp.playlist.admin",
+            "nbmp.hologram.admin",
+        ],
+    ),
+];
+
+/// The nodes whose grant also grants `node`, through any number of `childrens` steps (Bukkit gives a child to
+/// whoever has its parent). `node` itself is not in the list.
+pub fn granting_nodes(node: &str) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = Vec::new();
+    let mut todo: Vec<&str> = vec![node];
+    while let Some(child) = todo.pop() {
+        for (parent, children) in CHILDREN.iter() {
+            if children.contains(&child) && !out.contains(parent) {
+                out.push(*parent);
+                todo.push(*parent);
+            }
+        }
+    }
+    out
+}
+
 /// Runs a player's command line after the permission check of [`needs`]; `allowed(node, default_level)`
 /// answers for the player.
 pub fn run_checked(
@@ -274,6 +315,12 @@ pub fn complete(engine: &Engine, line: &str) -> Vec<String> {
     out
 }
 
+/// What the console gets from the player controls: NoteBlockMusicPlayer's own line (`RadioCommandExecutor`, with
+/// its bracketed prefix, not the messages file).
+fn console_refused() -> Answer {
+    Answer::done(vec!["[NoteBlockMusicPlayer] You can't use this command".to_string()])
+}
+
 fn radio_cmd(engine: &mut Engine, uuid: Option<u128>, args: &[&str]) -> Answer {
     match args.first().copied() {
         Some("toggle") => match uuid {
@@ -281,11 +328,11 @@ fn radio_cmd(engine: &mut Engine, uuid: Option<u128>, args: &[&str]) -> Answer {
                 engine.toggle_mute(player);
                 Answer::done(Vec::new())
             }
-            None => Answer::none(),
+            None => console_refused(),
         },
         Some("volume") => {
             let Some(player) = uuid else {
-                return Answer::none();
+                return console_refused();
             };
             match args.get(1).copied() {
                 None => {
@@ -392,12 +439,13 @@ fn playlist_cmd(engine: &mut Engine, args: &[&str]) -> Vec<String> {
     }
 }
 
+/// The help texts are NoteBlockMusicPlayer's own literal strings (its class constants), in the order the executor
+/// sends them.
 fn radio_help() -> Vec<String> {
     vec![
         "Commands for player controls:".to_string(),
-        "/radio help - show help for player controls".to_string(),
-        "/radio toggle - mute or unmute all radios for you".to_string(),
-        "/radio volume <0-100> - set volume of all radios for you".to_string(),
+        "Use /radio volume <0-100> - set volume of all radios for you".to_string(),
+        "Use /radio toggle - mute or unmute all radios for you".to_string(),
     ]
 }
 
@@ -411,34 +459,35 @@ fn kind_help(kind: Kind) -> Vec<String> {
     };
     vec![
         format!("Commands for {heading}:"),
-        format!("{cmd} help - show help for {t} radios"),
         format!("{cmd} <enable/disable> <name of radio> - enable/disable given radio"),
         format!("{cmd} skip <name of radio> - skip actual song in radio"),
         format!("{cmd} reload - turn off and reloads from config all {t} radios"),
+        format!("{cmd} help - shows this help"),
     ]
 }
 
 fn nbmp_help() -> Vec<String> {
     vec![
         "Commands for NoteBlockMusicPlayer plugin:".to_string(),
-        "/nbmp help - shows this help".to_string(),
-        "/nbmp reload - reloads the configuration".to_string(),
+        "/positionradio help - show help for position radios".to_string(),
+        "/worldradio help - show help for world radios".to_string(),
+        "/serverradio help - show help for server radios".to_string(),
         "/nbmp playlist help - show help for playlists".to_string(),
-        "/nbmp hologram reload - reloads the holograms".to_string(),
+        "/radio help - show help for player controls".to_string(),
     ]
 }
 
 fn playlist_help() -> Vec<String> {
     vec![
         "Commands for Playlists:".to_string(),
-        "/nbmp playlist help - show help for playlists".to_string(),
-        "/nbmp playlist list - shows list of playlists".to_string(),
-        "/nbmp playlist songs <name of playlist> - shows list of songs in playlist".to_string(),
-        "/nbmp playlist create <name of playlist> - creates new playlist".to_string(),
-        "/nbmp playlist add <name of playlist> <name of song> - add song to playlist".to_string(),
-        "/nbmp playlist remove <name of playlist> <name of song> - remove song from playlist"
+        "Use /nbmp playlist reload - reload all playlists from config".to_string(),
+        "Use /nbmp playlist create <name of playlist> - creates new playlist".to_string(),
+        "Use /nbmp playlist songs <name of playlist> - shows list of songs in playlist".to_string(),
+        "Use /nbmp playlist add <name of playlist> <name of song> - add song to playlist".to_string(),
+        "Use /nbmp playlist remove <name of playlist> <name of song> - remove song from playlist"
             .to_string(),
-        "/nbmp playlist reload - reload all playlists from config".to_string(),
+        "Use /nbmp playlist list - shows list of playlists".to_string(),
+        "Use /nbmp playlist help - shows this help".to_string(),
     ]
 }
 

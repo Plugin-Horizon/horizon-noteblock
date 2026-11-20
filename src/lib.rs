@@ -236,12 +236,19 @@ impl Hooks for Mod {
         };
         let uuid = player.map(|p| p.uuid());
         // The original asks the node of the matched usage (`radio.toggle`, `nbmp.admin`, ...) with `hasPermission`.
+        // Bukkit also grants a node to whoever has a parent that lists it in `childrens` (`commands::granting_nodes`).
         // The node's default (declared in `permission_gather_nodes`) decides unless the handler answers; any error
-        // is a denial. The query runs before the engine lock, since it needs the host.
+        // is a denial. The queries run before the engine lock, since they need the host.
         let granted = match (player, commands::needs(&line)) {
-            (Some(player), Some((node, _))) => player
-                .permission_bool(&mut *host, &PermissionNode::new(node, PermissionValueType::Boolean))
-                .unwrap_or(false),
+            (Some(player), Some((node, _))) => {
+                let mut nodes = vec![node.clone()];
+                nodes.extend(commands::granting_nodes(&node).into_iter().map(str::to_owned));
+                nodes.iter().any(|name| {
+                    player
+                        .permission_bool(&mut *host, &PermissionNode::new(name.clone(), PermissionValueType::Boolean))
+                        .unwrap_or(false)
+                })
+            }
             _ => true,
         };
         let answer = {

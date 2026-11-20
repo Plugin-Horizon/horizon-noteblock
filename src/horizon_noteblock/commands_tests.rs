@@ -91,9 +91,11 @@ fn other_roots_are_not_ours() {
 #[test]
 fn volume_needs_a_player_and_a_level_from_0_to_100() {
     let mut e = engine();
-    assert!(
-        !run(&mut e, None, "radio volume 40").ran,
-        "the console has no volume"
+    let console = run(&mut e, None, "radio volume 40");
+    assert_eq!(
+        console.lines,
+        vec!["[NoteBlockMusicPlayer] You can't use this command".to_string()],
+        "the console gets the plugin's refusal line"
     );
     let set = run(&mut e, Some(7), "radio volume 40");
     assert!(set.ran);
@@ -113,7 +115,46 @@ fn toggle_mutes_the_player_for_every_radio() {
     assert!(e.is_muted(9));
     assert!(run(&mut e, Some(9), "radio toggle").ran);
     assert!(!e.is_muted(9));
-    assert!(!run(&mut e, None, "radio toggle").ran);
+    assert_eq!(
+        run(&mut e, None, "radio toggle").lines,
+        vec!["[NoteBlockMusicPlayer] You can't use this command".to_string()]
+    );
+    assert!(!e.is_muted(0), "the console mutes nobody");
+}
+
+/// The help texts are the plugin's own strings (literal values from its class constants, in order).
+#[test]
+fn help_texts_match_the_plugin() {
+    let mut e = engine();
+    assert_eq!(
+        run(&mut e, None, "radio").lines,
+        vec![
+            "Commands for player controls:".to_string(),
+            "Use /radio volume <0-100> - set volume of all radios for you".to_string(),
+            "Use /radio toggle - mute or unmute all radios for you".to_string(),
+        ]
+    );
+    let playlists = run(&mut e, None, "nbmp playlist help").lines;
+    assert_eq!(playlists.len(), 8);
+    assert_eq!(playlists[0], "Commands for Playlists:");
+    assert_eq!(playlists[7], "Use /nbmp playlist help - shows this help");
+    let world = run(&mut e, None, "wr").lines;
+    assert_eq!(world[0], "Commands for World Radios:");
+    assert_eq!(world[4], "/worldradio help - shows this help");
+    let main = run(&mut e, None, "nbmp help").lines;
+    assert_eq!(main.len(), 6);
+    assert_eq!(main[5], "/radio help - show help for player controls");
+}
+
+#[test]
+fn child_nodes_are_granted_by_their_parents() {
+    assert_eq!(granting_nodes("radio.toggle"), vec!["radio.volume"]);
+    assert_eq!(granting_nodes("worldradio.enable"), vec!["worldradio.admin", "nbmp.admin"]);
+    assert_eq!(
+        granting_nodes("nbmp.playlist.reload"),
+        vec!["nbmp.playlist.admin", "nbmp.admin"]
+    );
+    assert!(granting_nodes("radio.volume").is_empty());
 }
 
 #[test]
